@@ -1,6 +1,6 @@
 local AdminList = { 
     8908656348, --pond
-    6948281,   --dew    
+    290863568,   --dew    
 }
 
 --////////////////////////////////////////////////////////////
@@ -106,4 +106,5 @@ task.spawn(function()
     Players.PlayerAdded:Connect(function(plr)
         plr.Chatted:Connect(function(msg) onChatted(msg, plr) end)
     end)
+
 end)
